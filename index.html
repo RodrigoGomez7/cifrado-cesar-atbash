@@ -7,11 +7,11 @@
 body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background:#f4f4f4; }
 h1 { color: #2c3e50; }
 h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
-textarea, input, select { width: 100%; padding: 8px; margin: 5px 0 15px; box-sizing: border-box; border:1px solid #ccc; border-radius:4px; }
-button { padding: 10px 20px; margin: 5px 5px 5px 0; background:#2c3e50; color:#fff; border:none; cursor:pointer; border-radius:4px; }
+textarea, input, select { width: 100%; padding: 8px; margin: 5px 0 15px; box-sizing: border-box; border:1px solid #ccc; border-radius:4px; font-size:14px; }
+button { padding: 10px 20px; margin: 5px 5px 5px 0; background:#2c3e50; color:#fff; border:none; cursor:pointer; border-radius:4px; font-size:14px; }
 button:hover { background:#1a252f; }
 .box { background:#fff; padding:20px; border-radius:8px; margin-bottom:20px; }
-.resultado { background:#e8f5e9; padding:12px; border-left:4px solid #4caf50; font-family:monospace; font-size:15px; }
+.resultado { background:#e8f5e9; padding:12px; border-left:4px solid #4caf50; font-family:monospace; font-size:15px; word-wrap:break-word; min-height:20px; }
 .info { background:#e3f2fd; padding:10px; border-left:4px solid #2196f3; margin-top:8px; font-size:14px; }
 label { font-weight:bold; display:block; margin-top:10px; }
 small { color:#666; display:block; margin-top:-10px; margin-bottom:10px; }
@@ -26,7 +26,7 @@ small { color:#666; display:block; margin-top:-10px; margin-bottom:10px; }
 <h2>1. Conjunto de caracteres</h2>
 <label>Caracteres a usar (por defecto ASCII imprimible 32-126):</label>
 <input type="text" id="charset" value=" !&quot;#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~">
-<small>Puedes modificarlo. Ejemplo: abcdefghijklmnopqrstuvwxyz</small>
+<small>El espacio siempre se preserva. Los caracteres fuera de este conjunto se cifran por su codigo Unicode.</small>
 </div>
 
 <div class="box">
@@ -62,36 +62,107 @@ small { color:#666; display:block; margin-top:-10px; margin-bottom:10px; }
 </div>
 
 <script>
+// ============================================================
+// UTILIDADES
+// ============================================================
 function getCharset() {
   var raw = document.getElementById('charset').value;
-  return raw.split('').filter(function(c, i, a) { return a.indexOf(c) === i; });
+  // El espacio no forma parte del charset porque siempre se preserva
+  var cs = [];
+  for (var i = 0; i < raw.length; i++) {
+    var c = raw[i];
+    if (c !== ' ' && cs.indexOf(c) === -1) cs.push(c);
+  }
+  return cs;
 }
 
+// Convierte el texto en array de code points (maneja Unicode > 0xFFFF)
+function toCodePoints(texto) {
+  var arr = [];
+  var iter = texto[Symbol.iterator]();
+  var r = iter.next();
+  while (!r.done) {
+    arr.push(r.value.codePointAt(0));
+    r = iter.next();
+  }
+  return arr;
+}
+
+// Rango Unicode seguro para simbolos (sin controles, sin surrogates, sin espacio)
+var UMIN = 0x21;
+var UMAX = 0x2FFFF;
+var URANGO = UMAX - UMIN + 1;
+
+function evitarSurrogate(cp) {
+  if (cp >= 0xD800 && cp <= 0xDFFF) return UMIN + ((cp - UMIN) % (0xD800 - UMIN));
+  return cp;
+}
+
+// ============================================================
+// CESAR (cifra Y descifra con la misma logica)
+//  - Espacio: se preserva siempre
+//  - Caracter en charset: se desplaza dentro del charset
+//  - Caracter fuera del charset: se desplaza por code point Unicode
+// ============================================================
 function cesar(texto, desplazamiento, charset, descifrar) {
   var n = charset.length;
-  if (descifrar) desplazamiento = (n - (desplazamiento % n)) % n;
-  var out = '';
-  for (var i = 0; i < texto.length; i++) {
-    var ch = texto[i];
+  var cps = toCodePoints(texto);
+  var out = [];
+
+  for (var i = 0; i < cps.length; i++) {
+    var cp = cps[i];
+
+    if (cp === 0x20) { out.push(' '); continue; }
+
+    var ch = String.fromCodePoint(cp);
     var idx = charset.indexOf(ch);
-    if (idx === -1) { out += ch; continue; }
-    out += charset[(idx + desplazamiento) % n];
+
+    if (idx !== -1) {
+      var k = descifrar ? (n - (desplazamiento % n)) % n : (desplazamiento % n);
+      out.push(charset[(idx + k) % n]);
+    } else {
+      var nuevo;
+      if (descifrar) {
+        nuevo = ((cp - UMIN - (desplazamiento % URANGO)) % URANGO + URANGO) % URANGO + UMIN;
+      } else {
+        nuevo = ((cp - UMIN + (desplazamiento % URANGO)) % URANGO + URANGO) % URANGO + UMIN;
+      }
+      out.push(String.fromCodePoint(evitarSurrogate(nuevo)));
+    }
   }
-  return out;
+  return out.join('');
 }
 
+// ============================================================
+// ATBASH (misma logica)
+// ============================================================
 function atbash(texto, charset) {
   var n = charset.length;
-  var out = '';
-  for (var i = 0; i < texto.length; i++) {
-    var ch = texto[i];
+  var cps = toCodePoints(texto);
+  var out = [];
+
+  for (var i = 0; i < cps.length; i++) {
+    var cp = cps[i];
+
+    if (cp === 0x20) { out.push(' '); continue; }
+
+    var ch = String.fromCodePoint(cp);
     var idx = charset.indexOf(ch);
-    if (idx === -1) { out += ch; continue; }
-    out += charset[n - 1 - idx];
+
+    if (idx !== -1) {
+      out.push(charset[n - 1 - idx]);
+    } else {
+      var nuevo = UMIN + (UMAX - cp);
+      if (nuevo < UMIN) nuevo = UMIN;
+      out.push(String.fromCodePoint(evitarSurrogate(nuevo)));
+    }
   }
-  return out;
+  return out.join('');
 }
 
+// ============================================================
+// BOTON CIFRAR
+// ============================================================
 function cifrar() {
   var texto = document.getElementById('textoClaro').value;
   var metodo = document.getElementById('metodoCifrado').value;
@@ -103,10 +174,14 @@ function cifrar() {
   document.getElementById('resultadoCifrado').textContent = res;
 }
 
-// ---------- Diccionario de palabras comunes ----------
-var PALABRAS = ['de','la','el','en','y','que','los','del','las','un','una','es','por','con','no','se','su','para','como','mas','pero','sus','le','ya','o','este','si','porque','esta','entre','cuando','muy','sin','sobre','tambien','me','hasta','hay','donde','quien','desde','todo','nos','durante','todos','uno','les','ni','contra','otros','ese','eso','ante','ellos','esto','mi','antes','algunos','unos','yo','otro','otras','otra','tanto','esa','estos','mucho','quienes','nada','muchos','cual','poco','ella','estar','estas','algunas','algo','nosotros','hola','mundo','casa','perro','gato','amigo','bueno','malo','grande','pequeno','dia','noche','agua','fuego','tierra','cielo','hombre','mujer','nino','ciudad','pais','trabajo','escuela','libro','mesa','silla','puerta','ventana','comida','tiempo','vida','amor','feliz','triste','nuevo','viejo','rojo','azul','verde','negro','blanco'];
+// ============================================================
+// DICCIONARIO
+// ============================================================
+var PALABRAS = ['de','la','el','en','y','que','los','del','las','un','una','es','por','con','no','se','su','para','como','mas','pero','sus','le','ya','o','este','si','porque','esta','entre','cuando','muy','sin','sobre','tambien','me','hasta','hay','donde','quien','desde','todo','nos','durante','todos','uno','les','ni','contra','otros','ese','eso','ante','ellos','esto','mi','antes','algunos','unos','yo','otro','otras','otra','tanto','esa','estos','mucho','quienes','nada','muchos','cual','poco','ella','estar','estas','algunas','algo','nosotros','hola','mundo','casa','perro','gato','amigo','bueno','malo','grande','pequeno','dia','noche','agua','fuego','tierra','cielo','hombre','mujer','nino','ciudad','pais','trabajo','escuela','libro','mesa','silla','puerta','ventana','comida','tiempo','vida','amor','feliz','triste','nuevo','viejo','rojo','azul','verde','negro','blanco','secreto','mensaje','clave','cifrado','seguridad','datos','sistema','programa','codigo','rodrigo','gomez','juan','pedro','maria','jose','luis','carlos','ana','laura','miguel','pablo','diego','sofia','lucia','marta','javier','antonio','manuel','francisco','david','daniel','alex','kevin','brayan','andres','santiago','sebastian','alejandro','fernando','ricardo','eduardo','roberto','alberto','sergio','raul','victor','oscar','ivan','hector','gerardo','martin','ramon','salvador','ernesto','jorge','arturo','enrique','alfredo','gabriel','emilio','adrian','ruben','joaquin','agustin','ignacio','gonzalo','nicolas','matias','tomas','felipe','bruno','marco','rene','omar','elias','isaac','jacob','abraham','moises','noe','adan','eva','sara','raquel','rebeca','esther','rut','noemi','miriam','deborah','judit','elena','carmen','rosa','pilar','teresa','isabel','beatriz','patricia','gabriela','veronica','monica','claudia','diana','sandra','nancy','karina','wendy','brenda','gloria','silvia','alicia','adriana','alejandra','paola','daniela','valeria','camila','isabella','valentina','renata','emilia','julieta','martina','catalina','antonia','josefa','florencia','constanza','trinidad','esperanza','soledad','amparo','consuelo','dolores','remedios','angeles','mercedes','piedad','virtudes','rocio','aurora','blanca','nieves','estrella','luna','sol','mar','rio','monte','valle','campo','bosque','flor','rosa','clavel','tulipan','girasol','orquidea','jazmin','azucena','lirio'];
 
-// ---------- Puntuacion por frecuencias + diccionario ----------
+// ============================================================
+// PUNTUACION (Al-Kindi: chi-cuadrado + diccionario + heuristica)
+// ============================================================
 function puntuar(texto) {
   var txt = texto.toLowerCase();
   var letras = txt.replace(/[^a-z]/g,'');
@@ -129,55 +204,64 @@ function puntuar(texto) {
   }
   var score = -chi;
 
+  // Bonus por palabras reales del diccionario
   var palabras = txt.split(/[^a-z]+/).filter(function(p){ return p.length > 0; });
   for (var j = 0; j < palabras.length; j++) {
-    if (PALABRAS.indexOf(palabras[j]) !== -1) score += 200;
+    if (PALABRAS.indexOf(palabras[j]) !== -1) score += 300;
   }
 
+  // Bonus por proporcion de vocales cercana al 42%
   var vocales = (letras.match(/[aeiou]/g) || []).length;
   var ratioVocales = vocales / letras.length;
   score += (1 - Math.abs(ratioVocales - 0.42)) * 50;
 
+  // Bonus por espacios
   score += (txt.match(/ /g) || []).length * 10;
 
+  // Penalizar caracteres raros
   var raros = (txt.match(/[^a-z ]/g) || []).length;
   score -= raros * 5;
 
   return score;
 }
 
-// ---------- Descifrado automatico ----------
+// ============================================================
+// DESCIFRADO AUTOMATICO
+// ============================================================
 function descifrarAuto() {
   var texto = document.getElementById('textoCifrado').value;
   var charset = getCharset();
-  var abc = 'abcdefghijklmnopqrstuvwxyz';
 
   var candidatos = [];
 
-  // Atbash con charset y con alfabeto puro
+  // Atbash con la logica unificada
   candidatos.push({ tipo: 'Atbash', modulo: null, texto: atbash(texto, charset) });
-  candidatos.push({ tipo: 'Atbash (alfabeto)', modulo: null, texto: atbash(texto.toLowerCase(), abc) });
 
-  // Cesar con charset
-  var n = charset.length;
-  for (var k = 1; k < n; k++) {
+  // Cesar con la logica unificada, probando desplazamientos 1..300
+  for (var k = 1; k <= 300; k++) {
     candidatos.push({ tipo: 'Cesar', modulo: k, texto: cesar(texto, k, charset, true) });
   }
 
-  // Cesar con alfabeto puro
+  // Cesar con alfabeto puro (por si el usuario solo uso letras)
+  var abc = 'abcdefghijklmnopqrstuvwxyz';
   for (var k2 = 1; k2 < abc.length; k2++) {
-    candidatos.push({ tipo: 'Cesar (alfabeto)', modulo: k2, texto: cesar(texto.toLowerCase(), k2, abc, true) });
+    candidatos.push({ tipo: 'Cesar (alfabeto)', modulo: k2, texto: cesar(texto.toLowerCase(), k2, abc.split(''), true) });
   }
 
   // Elegir el mejor
   var mejor = candidatos[0];
   var mejorScore = puntuar(mejor.texto);
-  for (var i = 0; i < candidatos.length; i++) {
+  for (var i = 1; i < candidatos.length; i++) {
     var s = puntuar(candidatos[i].texto);
     if (s > mejorScore) { mejorScore = s; mejor = candidatos[i]; }
   }
 
-  document.getElementById('resultadoDescifrado').textContent = mejor.texto;
+  var textoFinal = mejor.texto;
+  if (/[A-Z]/.test(texto)) {
+    textoFinal = textoFinal.replace(/\b\w/g, function(l){ return l.toUpperCase(); });
+  }
+
+  document.getElementById('resultadoDescifrado').textContent = textoFinal;
   document.getElementById('infoDescifrado').innerHTML =
     '<div class="info"><b>Tipo detectado:</b> ' + mejor.tipo +
     (mejor.modulo !== null ? ' | <b>Modulo:</b> ' + mejor.modulo : '') +
