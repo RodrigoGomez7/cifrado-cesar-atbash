@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Cifrado Cesar y Atbash - Al-Kindi</title>
+<style>
+body { font-family: Arial, sans-serif; max-width: 900px; margin: 20px auto; padding: 20px; background:#f4f4f4; }
+h1 { color: #2c3e50; }
+h2 { color: #34495e; border-bottom: 2px solid #ecf0f1; padding-bottom: 5px; }
+textarea, input, select { width: 100%; padding: 8px; margin: 5px 0 15px; box-sizing: border-box; border:1px solid #ccc; border-radius:4px; }
+button { padding: 10px 20px; margin: 5px 5px 5px 0; background:#2c3e50; color:#fff; border:none; cursor:pointer; border-radius:4px; }
+button:hover { background:#1a252f; }
+.box { background:#fff; padding:20px; border-radius:8px; margin-bottom:20px; }
+.resultado { background:#e8f5e9; padding:12px; border-left:4px solid #4caf50; font-family:monospace; font-size:15px; }
+.info { background:#e3f2fd; padding:10px; border-left:4px solid #2196f3; margin-top:8px; font-size:14px; }
+label { font-weight:bold; display:block; margin-top:10px; }
+small { color:#666; display:block; margin-top:-10px; margin-bottom:10px; }
+</style>
+</head>
+<body>
+
+<h1>Cifrado y Descifrado: Cesar y Atbash</h1>
+<p><em>Basado en el analisis de frecuencias de Al-Kindi</em></p>
+
+<div class="box">
+<h2>1. Conjunto de caracteres</h2>
+<label>Caracteres a usar (por defecto ASCII imprimible 32-126):</label>
+<input type="text" id="charset" value=" !&quot;#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\]^_`abcdefghijklmnopqrstuvwxyz{|}~">
+<small>Puedes modificarlo. Ejemplo: abcdefghijklmnopqrstuvwxyz</small>
+</div>
+
+<div class="box">
+<h2>2. Cifrar</h2>
+<label>Texto a cifrar:</label>
+<textarea id="textoClaro" rows="3">Hola mundo</textarea>
+
+<label>Metodo:</label>
+<select id="metodoCifrado">
+<option value="cesar">Cesar</option>
+<option value="atbash">Atbash</option>
+</select>
+
+<label>Modulo (desplazamiento) para Cesar:</label>
+<input type="number" id="modulo" value="3" min="1">
+
+<button onclick="cifrar()">Cifrar</button>
+
+<h3>Resultado:</h3>
+<div id="resultadoCifrado" class="resultado">-</div>
+</div>
+
+<div class="box">
+<h2>3. Descifrar automatico</h2>
+<label>Texto cifrado:</label>
+<textarea id="textoCifrado" rows="3">Krod pxqgr</textarea>
+
+<button onclick="descifrarAuto()">Descifrar automaticamente</button>
+
+<h3>Resultado:</h3>
+<div id="resultadoDescifrado" class="resultado">-</div>
+<div id="infoDescifrado"></div>
+</div>
+
+<script>
+function getCharset() {
+  var raw = document.getElementById('charset').value;
+  return raw.split('').filter(function(c, i, a) { return a.indexOf(c) === i; });
+}
+
+function cesar(texto, desplazamiento, charset, descifrar) {
+  var n = charset.length;
+  if (descifrar) desplazamiento = (n - (desplazamiento % n)) % n;
+  var out = '';
+  for (var i = 0; i < texto.length; i++) {
+    var ch = texto[i];
+    var idx = charset.indexOf(ch);
+    if (idx === -1) { out += ch; continue; }
+    out += charset[(idx + desplazamiento) % n];
+  }
+  return out;
+}
+
+function atbash(texto, charset) {
+  var n = charset.length;
+  var out = '';
+  for (var i = 0; i < texto.length; i++) {
+    var ch = texto[i];
+    var idx = charset.indexOf(ch);
+    if (idx === -1) { out += ch; continue; }
+    out += charset[n - 1 - idx];
+  }
+  return out;
+}
+
+function cifrar() {
+  var texto = document.getElementById('textoClaro').value;
+  var metodo = document.getElementById('metodoCifrado').value;
+  var modulo = parseInt(document.getElementById('modulo').value) || 1;
+  var charset = getCharset();
+  var res;
+  if (metodo === 'cesar') res = cesar(texto, modulo, charset, false);
+  else res = atbash(texto, charset);
+  document.getElementById('resultadoCifrado').textContent = res;
+}
+
+// ---------- Diccionario de palabras comunes ----------
+var PALABRAS = ['de','la','el','en','y','que','los','del','las','un','una','es','por','con','no','se','su','para','como','mas','pero','sus','le','ya','o','este','si','porque','esta','entre','cuando','muy','sin','sobre','tambien','me','hasta','hay','donde','quien','desde','todo','nos','durante','todos','uno','les','ni','contra','otros','ese','eso','ante','ellos','esto','mi','antes','algunos','unos','yo','otro','otras','otra','tanto','esa','estos','mucho','quienes','nada','muchos','cual','poco','ella','estar','estas','algunas','algo','nosotros','hola','mundo','casa','perro','gato','amigo','bueno','malo','grande','pequeno','dia','noche','agua','fuego','tierra','cielo','hombre','mujer','nino','ciudad','pais','trabajo','escuela','libro','mesa','silla','puerta','ventana','comida','tiempo','vida','amor','feliz','triste','nuevo','viejo','rojo','azul','verde','negro','blanco'];
+
+// ---------- Puntuacion por frecuencias + diccionario ----------
+function puntuar(texto) {
+  var txt = texto.toLowerCase();
+  var letras = txt.replace(/[^a-z]/g,'');
+  if (letras.length < 2) return -Infinity;
+
+  var FREC = {'a':12.53,'b':1.42,'c':4.68,'d':5.86,'e':13.68,'f':0.69,'g':1.01,'h':0.70,'i':6.25,'j':0.44,'k':0.11,'l':4.97,'m':3.15,'n':6.71,'o':8.68,'p':2.51,'q':0.69,'r':6.87,'s':7.98,'t':4.64,'u':3.93,'v':0.90,'w':0.04,'x':0.22,'y':0.90,'z':0.52};
+
+  var conteo = {};
+  for (var i = 0; i < letras.length; i++) {
+    var c = letras[i];
+    conteo[c] = (conteo[c] || 0) + 1;
+  }
+
+  var chi = 0;
+  var total = letras.length;
+  for (var letra in FREC) {
+    var esperado = (FREC[letra] / 100) * total;
+    var observado = conteo[letra] || 0;
+    chi += Math.pow(observado - esperado, 2) / (esperado || 1);
+  }
+  var score = -chi;
+
+  var palabras = txt.split(/[^a-z]+/).filter(function(p){ return p.length > 0; });
+  for (var j = 0; j < palabras.length; j++) {
+    if (PALABRAS.indexOf(palabras[j]) !== -1) score += 200;
+  }
+
+  var vocales = (letras.match(/[aeiou]/g) || []).length;
+  var ratioVocales = vocales / letras.length;
+  score += (1 - Math.abs(ratioVocales - 0.42)) * 50;
+
+  score += (txt.match(/ /g) || []).length * 10;
+
+  var raros = (txt.match(/[^a-z ]/g) || []).length;
+  score -= raros * 5;
+
+  return score;
+}
+
+// ---------- Descifrado automatico ----------
+function descifrarAuto() {
+  var texto = document.getElementById('textoCifrado').value;
+  var charset = getCharset();
+  var abc = 'abcdefghijklmnopqrstuvwxyz';
+
+  var candidatos = [];
+
+  // Atbash con charset y con alfabeto puro
+  candidatos.push({ tipo: 'Atbash', modulo: null, texto: atbash(texto, charset) });
+  candidatos.push({ tipo: 'Atbash (alfabeto)', modulo: null, texto: atbash(texto.toLowerCase(), abc) });
+
+  // Cesar con charset
+  var n = charset.length;
+  for (var k = 1; k < n; k++) {
+    candidatos.push({ tipo: 'Cesar', modulo: k, texto: cesar(texto, k, charset, true) });
+  }
+
+  // Cesar con alfabeto puro
+  for (var k2 = 1; k2 < abc.length; k2++) {
+    candidatos.push({ tipo: 'Cesar (alfabeto)', modulo: k2, texto: cesar(texto.toLowerCase(), k2, abc, true) });
+  }
+
+  // Elegir el mejor
+  var mejor = candidatos[0];
+  var mejorScore = puntuar(mejor.texto);
+  for (var i = 0; i < candidatos.length; i++) {
+    var s = puntuar(candidatos[i].texto);
+    if (s > mejorScore) { mejorScore = s; mejor = candidatos[i]; }
+  }
+
+  document.getElementById('resultadoDescifrado').textContent = mejor.texto;
+  document.getElementById('infoDescifrado').innerHTML =
+    '<div class="info"><b>Tipo detectado:</b> ' + mejor.tipo +
+    (mejor.modulo !== null ? ' | <b>Modulo:</b> ' + mejor.modulo : '') +
+    ' | <b>Puntuacion:</b> ' + mejorScore.toFixed(2) +
+    '</div>';
+}
+</script>
+
+</body>
+</html>
